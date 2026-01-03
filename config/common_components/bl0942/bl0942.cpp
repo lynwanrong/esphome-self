@@ -58,7 +58,7 @@ void BL0942::loop() {
 void BL0942::parse_data_(uint8_t *data, int len) {
   // 再次检查包头和长度 (双重保险)
   if (data[0] != 0x55 || len != 23) {
-    ESP_LOGW(TAG, "Invalid frame or length");
+    ESP_LOGE(TAG, "Invalid frame or length");
     return;
   }
 
@@ -71,7 +71,7 @@ void BL0942::parse_data_(uint8_t *data, int len) {
   check_sum = ~check_sum;
 
   if (check_sum != data[len - 1]) {
-    ESP_LOGW(TAG, "Checksum error: cal=%02X, recv=%02X", check_sum, data[len - 1]);
+    ESP_LOGE(TAG, "Checksum error: cal=%02X, recv=%02X", check_sum, data[len - 1]);
     return;
   }
 

@@ -41,32 +41,59 @@ captive_portal:
 
 uart:
   id: uart_bus
-  tx_pin: GPIO43
-  rx_pin: GPIO44
+  tx_pin: GPIO5
+  rx_pin: GPIO4
   baud_rate: 9600
   stop_bits: 1
 
-external_components:
-  - source: 
-      type: local
-      path: common_components
-    components: [bl0942]
-    refresh: never
+# external_components:
+#   - source: 
+#       type: local
+#       path: common_components
+#     components: [bl0942]
+#     refresh: never
 
-bl0942:
-  id: my_bl0942
-  uart_id: uart_bus
-  update_interval: 1s
+# bl0942:
+#   id: my_bl0942
+#   uart_id: uart_bus
+#   update_interval: 1s
+
+
+# sensor:
+#   - platform: bl0942
+#     id: my_bl0942
+#     voltage:
+#       name: "Voltage"
+#     current:
+#       name: "Current"
+#     power:
+#       name: "Active Power"
+#     power_factor:
+#       name: "Power Factor"
+
+
+switch:
+  - platform: gpio
+    pin: GPIO16
+    name: "Relay"
+    id: relay_1
+    restore_mode: ALWAYS_ON
 
 
 sensor:
   - platform: bl0942
-    id: my_bl0942
+    uart_id: uart_bus
+    line_frequency: 50Hz
+    update_interval: 1s
     voltage:
-      name: "Voltage"
+      name: 'Voltage'
     current:
-      name: "Current"
+      name: 'Current'
     power:
-      name: "Active Power"
-    power_factor:
-      name: "Power Factor"
+      name: 'Power'
+    energy:
+      name: 'Energy'
+    frequency:
+      name: "Frequency"
+
+
