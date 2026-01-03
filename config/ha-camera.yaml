@@ -1,5 +1,5 @@
 esphome:
-  name: ai-28-s3-camera
+  name: ha-camera
   friendly_name: Camera
 
   on_boot:
@@ -44,6 +44,9 @@ wifi:
     password: "4xxhmzsUWdmp"
 
 captive_portal:
+
+web_server:
+  port: 80
     
 i2c:
   - id: i2c_bus
@@ -81,7 +84,7 @@ sensor:
       name: "Camera Temperature"
     humidity:
       name: "Camera Humidity"
-    update_interval: 60s
+    update_interval: 5s
 
 output:
   - platform: ledc

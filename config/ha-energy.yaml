@@ -37,6 +37,9 @@ wifi:
     password: "4xxhmzsUWdmp"
 
 captive_portal:
+
+web_server:
+  port: 80
     
 
 uart:
