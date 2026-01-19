@@ -1,112 +1,225 @@
 #include "bl0942.h"
 #include "esphome/core/log.h"
+#include <cinttypes>
+
+// Datasheet: https://www.belling.com.cn/media/file_object/bel_product/BL0942/datasheet/BL0942_V1.06_en.pdf
 
 namespace esphome {
 namespace bl0942 {
 
-static const char *TAG = "bl0942";
-static const int C_MAX = 20; // 这里的定义保留您的原始设定
+static const char *const TAG = "bl0942";
 
-void BL0942::setup() {
-  ESP_LOGCONFIG(TAG, "Setting up BL0942...");
-  // 可以在这里做一些初始化检查，但 UART 已经在父类初始化了
+static const uint8_t BL0942_READ_COMMAND = 0x58;
+static const uint8_t BL0942_FULL_PACKET = 0xAA;
+static const uint8_t BL0942_PACKET_HEADER = 0x55;
+
+static const uint8_t BL0942_WRITE_COMMAND = 0xA8;
+
+static const uint8_t BL0942_REG_I_RMSOS = 0x12;
+static const uint8_t BL0942_REG_WA_CREEP = 0x14;
+static const uint8_t BL0942_REG_I_FAST_RMS_TH = 0x15;
+static const uint8_t BL0942_REG_I_FAST_RMS_CYC = 0x16;
+static const uint8_t BL0942_REG_FREQ_CYC = 0x17;
+static const uint8_t BL0942_REG_OT_FUNX = 0x18;
+static const uint8_t BL0942_REG_MODE = 0x19;
+static const uint8_t BL0942_REG_SOFT_RESET = 0x1C;
+static const uint8_t BL0942_REG_USR_WRPROT = 0x1D;
+static const uint8_t BL0942_REG_TPS_CTRL = 0x1B;
+
+static const uint32_t BL0942_REG_MODE_RESV = 0x03;
+static const uint32_t BL0942_REG_MODE_CF_EN = 0x04;
+static const uint32_t BL0942_REG_MODE_RMS_UPDATE_SEL = 0x08;
+static const uint32_t BL0942_REG_MODE_FAST_RMS_SEL = 0x10;
+static const uint32_t BL0942_REG_MODE_AC_FREQ_SEL = 0x20;
+static const uint32_t BL0942_REG_MODE_CF_CNT_CLR_SEL = 0x40;
+static const uint32_t BL0942_REG_MODE_CF_CNT_ADD_SEL = 0x80;
+static const uint32_t BL0942_REG_MODE_UART_RATE_19200 = 0x200;
+static const uint32_t BL0942_REG_MODE_UART_RATE_38400 = 0x300;
+static const uint32_t BL0942_REG_MODE_DEFAULT =
+    BL0942_REG_MODE_RESV | BL0942_REG_MODE_CF_EN | BL0942_REG_MODE_CF_CNT_ADD_SEL;
+
+static const uint32_t BL0942_REG_SOFT_RESET_MAGIC = 0x5a5a5a;
+static const uint32_t BL0942_REG_USR_WRPROT_MAGIC = 0x55;
+
+// 23-byte packet, 11 bits per byte, 2400 baud: about 105ms
+static const uint32_t PKT_TIMEOUT_MS = 200;
+
+void BL0942::loop() {
+  DataPacket buffer;
+  int avail = this->available();
+
+  if (!avail) {
+    return;
+  }
+  if (static_cast<size_t>(avail) < sizeof(buffer)) {
+    if (!this->rx_start_) {
+      this->rx_start_ = millis();
+    } else if (millis() > this->rx_start_ + PKT_TIMEOUT_MS) {
+      ESP_LOGW(TAG, "Junk on wire. Throwing away partial message (%d bytes)", avail);
+      this->read_array((uint8_t *) &buffer, avail);
+      this->rx_start_ = 0;
+    }
+    return;
+  }
+
+  if (this->read_array((uint8_t *) &buffer, sizeof(buffer))) {
+    if (this->validate_checksum_(&buffer)) {
+      this->received_package_(&buffer);
+    }
+  }
+  this->rx_start_ = 0;
+}
+
+bool BL0942::validate_checksum_(DataPacket *data) {
+  uint8_t checksum = BL0942_READ_COMMAND | this->address_;
+  // Whole package but checksum
+  uint8_t *raw = (uint8_t *) data;
+  for (uint32_t i = 0; i < sizeof(*data) - 1; i++) {
+    checksum += raw[i];
+  }
+  checksum ^= 0xFF;
+  if (checksum != data->checksum) {
+    ESP_LOGW(TAG, "BL0942 invalid checksum! 0x%02X != 0x%02X", checksum, data->checksum);
+  }
+  return checksum == data->checksum;
+}
+
+void BL0942::write_reg_(uint8_t reg, uint32_t val) {
+  uint8_t pkt[6];
+
+  this->flush();
+  pkt[0] = BL0942_WRITE_COMMAND | this->address_;
+  pkt[1] = reg;
+  pkt[2] = (val & 0xff);
+  pkt[3] = (val >> 8) & 0xff;
+  pkt[4] = (val >> 16) & 0xff;
+  pkt[5] = (pkt[0] + pkt[1] + pkt[2] + pkt[3] + pkt[4]) ^ 0xff;
+  this->write_array(pkt, 6);
+  delay(1);
+}
+
+int BL0942::read_reg_(uint8_t reg) {
+  union {
+    uint8_t b[4];
+    uint32_le_t le32;
+  } resp;
+
+  this->write_byte(BL0942_READ_COMMAND | this->address_);
+  this->write_byte(reg);
+  this->flush();
+  if (this->read_array(resp.b, 4) &&
+      resp.b[3] ==
+          (uint8_t) ((BL0942_READ_COMMAND + this->address_ + reg + resp.b[0] + resp.b[1] + resp.b[2]) ^ 0xff)) {
+    resp.b[3] = 0;
+    return resp.le32;
+  }
+  return -1;
 }
 
 void BL0942::update() {
-  // 对应您原代码中的 bl0942_timer_callback
-  // 发送读取指令 0x58, 0xAA
-  uint8_t cmd[2] = {0x58, 0xAA};
-  this->write_array(cmd, 2);
+  this->write_byte(BL0942_READ_COMMAND | this->address_);
+  this->write_byte(BL0942_FULL_PACKET);
 }
 
-void BL0942::loop() {
-  // 对应您原代码中的 while(true) 接收逻辑
-  // ESPHome 的 loop 是非阻塞的，所以我们不能在这里用死循环
-  // 而是检查是否有数据到达
+void BL0942::setup() {
+  // If either current or voltage references are set explicitly by the user,
+  // calculate the power reference from it unless that is also explicitly set.
+  if ((this->current_reference_set_ || this->voltage_reference_set_) && !this->power_reference_set_) {
+    this->power_reference_ = (this->voltage_reference_ * this->current_reference_ * 3537.0 / 305978.0) / 73989.0;
+    this->power_reference_set_ = true;
+  }
 
-  // 这里的逻辑：寻找包头 0x55
-  while (this->available() > 0) {
-    uint8_t byte;
-    this->peek_byte(&byte);
+  // Similarly for energy reference, if the power reference was set by the user
+  // either implicitly or explicitly.
+  if (this->power_reference_set_ && !this->energy_reference_set_) {
+    this->energy_reference_ = this->power_reference_ * 3600000 / 419430.4;
+    this->energy_reference_set_ = true;
+  }
 
-    if (rx_buffer_.empty()) {
-      if (byte == 0x55) {
-        // 找到包头，放入缓冲区
-        this->read_byte(&byte);
-        rx_buffer_.push_back(byte);
-      } else {
-        // 不是包头，丢弃
-        this->read_byte(&byte);
-      }
+  this->write_reg_(BL0942_REG_USR_WRPROT, BL0942_REG_USR_WRPROT_MAGIC);
+  if (this->reset_)
+    this->write_reg_(BL0942_REG_SOFT_RESET, BL0942_REG_SOFT_RESET_MAGIC);
+
+  uint32_t mode = BL0942_REG_MODE_DEFAULT;
+  mode |= BL0942_REG_MODE_RMS_UPDATE_SEL; /* 800ms refresh time */
+  if (this->line_freq_ == LINE_FREQUENCY_60HZ)
+    mode |= BL0942_REG_MODE_AC_FREQ_SEL;
+  this->write_reg_(BL0942_REG_MODE, mode);
+
+  this->write_reg_(BL0942_REG_USR_WRPROT, 0);
+
+  if (static_cast<uint32_t>(this->read_reg_(BL0942_REG_MODE)) != mode)
+    this->status_set_warning(LOG_STR("BL0942 setup failed!"));
+
+  this->flush();
+}
+
+void BL0942::received_package_(DataPacket *data) {
+  // Bad header
+  if (data->frame_header != BL0942_PACKET_HEADER) {
+    ESP_LOGI(TAG, "Invalid data. Header mismatch: %d", data->frame_header);
+    return;
+  }
+
+  // cf_cnt is only 24 bits, so track overflows
+  uint32_t cf_cnt = (uint24_t) data->cf_cnt;
+  if (cf_cnt < this->prev_cf_cnt_) {
+    // maybe overflows or bl094 chip reset
+    if (this->prev_cf_cnt_ > 0xE00000) {
+       this->offset_cf_cnt_ += 0x1000000;
     } else {
-      // 已经有包头了，继续读取后续数据
-      this->read_byte(&byte);
-      rx_buffer_.push_back(byte);
-
-      // 检查长度是否足够 (23字节)
-      if (rx_buffer_.size() >= 23) {
-        // 解析数据
-        this->parse_data_(rx_buffer_.data(), 23);
-        // 清空缓冲区，准备下一次读取
-        rx_buffer_.clear();
-      }
+       this->offset_cf_cnt_ += this->prev_cf_cnt_;
+       ESP_LOGW(TAG, "BL0942 chip reset detected! Accumulating last value: %u", this->prev_cf_cnt_);
     }
   }
+
+  this->prev_cf_cnt_ = cf_cnt;
+  cf_cnt += this->offset_cf_cnt_;
+
+
+  float v_rms = (uint24_t) data->v_rms / voltage_reference_;
+  float i_rms = (uint24_t) data->i_rms / current_reference_;
+  float watt = (int24_t) data->watt / power_reference_;
+  float total_energy_consumption = cf_cnt / energy_reference_;
+  float frequency = 1000000.0f / data->frequency;
+
+  if (voltage_sensor_ != nullptr) {
+    voltage_sensor_->publish_state(v_rms);
+  }
+  if (current_sensor_ != nullptr) {
+    current_sensor_->publish_state(i_rms);
+  }
+  if (power_sensor_ != nullptr) {
+    power_sensor_->publish_state(watt);
+  }
+  if (energy_sensor_ != nullptr) {
+    energy_sensor_->publish_state(total_energy_consumption);
+  }
+  if (frequency_sensor_ != nullptr) {
+    frequency_sensor_->publish_state(frequency);
+  }
+  this->status_clear_warning();
+  ESP_LOGV(TAG, "BL0942: U %fV, I %fA, P %fW, Cnt %" PRId32 ", ∫P %fkWh, frequency %fHz, status 0x%08X", v_rms, i_rms,
+           watt, cf_cnt, total_energy_consumption, frequency, data->status);
 }
 
-// 您的核心解析逻辑，完全保留
-void BL0942::parse_data_(uint8_t *data, int len) {
-  // 再次检查包头和长度 (双重保险)
-  if (data[0] != 0x55 || len != 23) {
-    ESP_LOGE(TAG, "Invalid frame or length");
-    return;
-  }
-
-  uint8_t check_sum = 88; // 您的初始校验值
-  
-  // 校验和计算
-  for (int i = 0; i < len - 1; i++) {
-    check_sum += data[i];
-  }
-  check_sum = ~check_sum;
-
-  if (check_sum != data[len - 1]) {
-    ESP_LOGE(TAG, "Checksum error: cal=%02X, recv=%02X", check_sum, data[len - 1]);
-    return;
-  }
-
-  // --- 以下是您的原始计算公式 ---
-
-  // 计算电流
-  int32_t c_reg = (data[3] << 16) | (data[2] << 8) | data[1];
-  c_reg = (data[3] & 0x80) ? -(16777216 - c_reg) : c_reg;
-  double c_value = (C_MAX == 10) ? c_reg * 1.218 / (305978 * 3) : c_reg * 1.218 / 305978;
-
-  // 计算电压
-  uint32_t v_reg = (data[6] << 16) | (data[5] << 8) | data[4];
-  double v_value = v_reg * 1.218 * 1950.51 / 37734390;
-
-  // 读取功率
-  int32_t p_reg = (data[12] << 16) | (data[11] << 8) | data[10];
-  p_reg = (data[12] & 0x80) ? -(16777216 - p_reg) : p_reg;
-  double p_reg_value = (C_MAX == 10) ? p_reg * 1.218 * 1.218 * 1950.51 / 511610 : p_reg * 1.218 * 1.218 * 1950.51 / 1803870;
-
-  // 计算功率因数
-  double p_cal_value = c_value * v_value;
-  double p_factor = p_cal_value ? p_reg_value / p_cal_value : 0;
-
-  // --- 更新传感器 ---
-  if (this->voltage_sensor_ != nullptr) 
-    this->voltage_sensor_->publish_state(v_value);
-    
-  if (this->current_sensor_ != nullptr) 
-    this->current_sensor_->publish_state(c_value);
-    
-  if (this->power_sensor_ != nullptr) 
-    this->power_sensor_->publish_state(p_reg_value);
-
-  if (this->power_factor_sensor_ != nullptr) 
-    this->power_factor_sensor_->publish_state(p_factor);
+void BL0942::dump_config() {  // NOLINT(readability-function-cognitive-complexity)
+  ESP_LOGCONFIG(TAG,
+                "BL0942:\n"
+                "  Reset: %s\n"
+                "  Address: %d\n"
+                "  Nominal line frequency: %d Hz\n"
+                "  Current reference: %f\n"
+                "  Energy reference: %f\n"
+                "  Power reference: %f\n"
+                "  Voltage reference: %f",
+                TRUEFALSE(this->reset_), this->address_, this->line_freq_, this->current_reference_,
+                this->energy_reference_, this->power_reference_, this->voltage_reference_);
+  LOG_SENSOR("", "Voltage", this->voltage_sensor_);
+  LOG_SENSOR("", "Current", this->current_sensor_);
+  LOG_SENSOR("", "Power", this->power_sensor_);
+  LOG_SENSOR("", "Energy", this->energy_sensor_);
+  LOG_SENSOR("", "Frequency", this->frequency_sensor_);
 }
 
 }  // namespace bl0942

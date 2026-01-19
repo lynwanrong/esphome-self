@@ -7,15 +7,21 @@ esphome:
       then:
         - if:
             condition:
-              lambda: 'return !id(camera1).is_failed();'
+              lambda: return !id(camera_1).is_failed();
             then:
               - rtttl.play: 'Beep:d=8,o=5,b=600:c'
 
 esp32:
-  board: esp32s3_120_16_8-qio_opi
+  board: esp32-s3-devkitc-1
+  variant: esp32s3
+  flash_size: 16MB
+  cpu_frequency: 240MHz
   framework:
     type: esp-idf
-    version: 5.4.2
+    sdkconfig_options:
+      CONFIG_ESP32S3_DEFAULT_CPU_FREQ_240: "y"
+      CONFIG_ESP32S3_DATA_CACHE_64KB: "y"
+      CONFIG_ESP32S3_DATA_CACHE_LINE_64B: "y"
 
 psram:
   mode: octal
@@ -40,7 +46,7 @@ wifi:
 
   # Enable fallback hotspot (captive portal) in case wifi connection fails
   ap:
-    ssid: "Ai-28-S3-Camera Fallback Hotspot"
+    ssid: "camera Fallback Hotspot"
     password: "4xxhmzsUWdmp"
 
 captive_portal:
@@ -55,23 +61,6 @@ i2c:
     # frequency: 100kHz
 
 
-# esp32_camera:
-#   name: Camera
-#   external_clock:
-#     pin: GPIO9
-#     frequency: 20MHz
-#   i2c_id: i2c_bus
-#   data_pins: [GPIO7, GPIO5, GPIO4, GPIO6, GPIO16, GPIO8, GPIO3, GPIO46]
-#   vsync_pin: GPIO11
-#   href_pin: GPIO10
-#   pixel_clock_pin: GPIO17
-#   reset_pin: GPIO18
-#   resolution: 640x480
-#   frame_buffer_count: 2
-#   max_framerate: 30 fps
-#   jpeg_quality: 10
-
-
 ###############################################################################
 #                                     sensor                                        #
 ###############################################################################
@@ -81,9 +70,9 @@ sensor:
   - platform: aht10
     variant: AHT10
     temperature:
-      name: "Camera Temperature"
+      name: Temperature
     humidity:
-      name: "Camera Humidity"
+      name: Humidity
     update_interval: 5s
 
 output:
@@ -101,12 +90,12 @@ light:
     pin: GPIO42
     num_leds: 3
     chipset: ws2812
-    name: "Camera RGB"
+    name: RGB
 
 # for ha cameara
 esp32_camera:
-  name: Camera
-  id: camera1
+  name: Frame
+  id: camera_1
   external_clock:
     pin: GPIO12
     frequency: 20MHz

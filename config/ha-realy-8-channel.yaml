@@ -1,15 +1,15 @@
 esphome:
-  name: ha-realy-8-channel
-  friendly_name: HA-Realy-8-Channel
+  name: realy
+  friendly_name: Realy
 
 esp32:
   board: esp32dev
   framework:
     type: esp-idf
-    version: 5.4.2
 
 # Enable logging
 logger:
+  level: INFO
 
 # Enable Home Assistant API
 api:
@@ -45,41 +45,41 @@ web_server:
 switch:
   - platform: gpio
     pin: 32
-    name: "通道1"
+    name: "channel 1"
     inverted: true
 
   - platform: gpio
     pin: 33
-    name: "通道2"
+    name: "channel 2"
     inverted: true
 
   - platform: gpio
     pin: 14
-    name: "通道3"  
+    name: "channel 3"
     inverted: true
 
   - platform: gpio
     pin: 13
-    name: "通道4"
+    name: "channel 4"
     inverted: true
 
   - platform: gpio
     pin: 15
-    name: "通道5"
+    name: "channel 5"
     inverted: true
 
   - platform: gpio
     pin: 4
-    name: "通道6"
+    name: "channel 6"
     inverted: true
 
   - platform: gpio
     pin: 16
-    name: "通道7"
+    name: "channel 7"
     inverted: true
 
   - platform: gpio
     pin: 5
-    name: "通道8"
+    name: "channel 8"
     inverted: true
     
