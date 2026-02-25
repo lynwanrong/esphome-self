@@ -1,0 +1,410 @@
+esphome:
+  name: air-monitor
+  friendly_name: Makerfabs Air Monitor
+  min_version: 2025.11.2 # use 2025.11.2
+
+
+esp32:
+  board: esp32-s3-devkitc-1
+  variant: esp32s3
+  flash_size: 16MB
+  cpu_frequency: 240MHz
+  framework:
+    type: esp-idf
+    sdkconfig_options:
+      CONFIG_ESP32S3_DEFAULT_CPU_FREQ_240: "y"
+      CONFIG_ESP32S3_DATA_CACHE_64KB: "y"
+      CONFIG_ESP32S3_DATA_CACHE_LINE_64B: "y"
+
+psram:
+  mode: octal
+  speed: 80MHz
+
+# Enable logging
+logger:
+  level: INFO
+
+# Enable Home Assistant API
+api:
+  encryption:
+    key: "qHBspV+EKzolBYTSvStuTl1OXMxRRjPNOThyQ1PidOE="
+
+ota:
+  - platform: esphome
+    password: "808dcebf08e6d249d866926211e79874="
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+
+  # Enable fallback hotspot (captive portal) in case wifi connection fails
+  ap:
+    ssid: "Air Monitor Fallback Hotspot"
+    password: "4xxhmzsUWdmp"
+
+# Include custom fonts
+font:
+
+  - file: 'fonts/GothamRnd-Book.ttf'
+    id: font_clock
+    size: 80
+    glyphs:
+      ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', ':']
+
+  - file: 'fonts/GothamRnd-Bold.ttf'
+    id: font_15
+    size: 15
+    glyphs:
+      ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K',
+       'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V',
+       'W', 'X', 'Y', 'Z', 'a', 'b', 'c', 'd', 'e', 'f', 'g',
+       'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r',
+       's', 't', 'u', 'v', 'w', 'x', 'y', 'z', ' ', '!']
+
+  - file: 'fonts/GothamRnd-Bold.ttf'
+    id: font_day
+    size: 100
+    glyphs:
+      ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', ':']
+
+  - file: 'fonts/GothamRnd-Bold.ttf'
+    id: font_20
+    size: 20
+    glyphs:
+      ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K',
+       'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 
+       'W', 'X', 'Y', 'Z', 'a', 'b', 'c', 'd', 'e', 'f', 'g',
+       'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r',
+       's', 't', 'u', 'v', 'w', 'x', 'y', 'z', ' ', '!']
+
+  - file: 'fonts/materialdesigniconswebfont.ttf'
+    id: icon_today
+    size: 40
+    glyphs: &mdi-weather-glyphs
+      - "\U000F050F" # mdi-weather-thermometer
+      - "\U000F0504" # mdi-weather-temperature-celsius
+      - "\U000F07E4" # mdi-weather-molecule-co2
+      - "\U000F058E" # mdi-weather-water-percent
+
+  #forecast time & temp
+  - file: 'fonts/GothamRnd-Bold.ttf'
+    id: font_sensor_value
+    size: 40
+    glyphs:
+      ['-', '.', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '°', 'b', 'm', 'p', 'C', '%']
+  
+  #forecast icon
+  - file: 'fonts/materialdesigniconswebfont.ttf'
+    id: icon_forecast
+    size: 70
+    glyphs: *mdi-weather-glyphs
+
+captive_portal:
+
+web_server:
+  port: 80
+
+spi:
+  - id: spi_bus
+    clk_pin: GPIO12
+    mosi_pin: GPIO11
+
+
+i2c:
+  - id: i2c_bus
+    sda: GPIO17 
+    scl: GPIO18
+    # scan: true
+    frequency: 400kHz
+
+output:
+  - platform: ledc
+    pin:
+      number: GPIO44
+    # frequency: 20000hz
+    id: lcd_pwm 
+    inverted: true
+
+light:
+  - platform: monochromatic
+    name: "lcd backlight"
+    output: lcd_pwm
+    id: lcd_backlight
+    restore_mode: ALWAYS_ON
+
+image:
+  - file: "assets/bg.png"
+    id: icon_bg
+    type: RGB565
+    transparency: alpha_channel
+  - file: "assets/ha.png"
+    id: ha_logo
+    type: RGB565
+    transparency: alpha_channel
+  - file: "assets/temp.png"
+    id: icon_temp
+    type: RGB565
+    transparency: alpha_channel
+  - file: "assets/co2.png"
+    id: icon_co2
+    type: RGB565
+    transparency: alpha_channel
+  - file: "assets/tvoc.png"
+    id: icon_tvoc
+    type: RGB565
+    transparency: alpha_channel
+  - file: "assets/humi.png"
+    id: icon_humi
+    type: RGB565
+    transparency: alpha_channel
+
+lvgl:
+  pages:
+    - id: main_page
+      widgets:
+        - image:
+            src: icon_bg
+        - label:
+            x: 20
+            y: 40
+            text: "Hello Makerfabs!"
+            text_font: font_20
+        - image:
+            src: ha_logo
+            x: 420
+            y: 40
+        - label:
+            id: label_time
+            x: 20
+            y: 60
+            text_font: font_clock
+            text: !lambda |-
+              auto time = id(ha_time).now();
+              char buffer[6];
+              snprintf(buffer, sizeof(buffer), "%02d:%02d", time.hour, time.minute);
+              return std::string(buffer);
+        
+        - obj:
+            x: 20
+            y: 160
+            width: 215
+            height: 135
+            widgets:
+              - label:
+                  text: "Temperature"
+                  text_font: font_15
+                  align: top_left
+              - image:
+                  src: icon_temp
+                  align: top_right
+              # - label:
+              #     text: "\U000F050F"
+              #     text_font: icon_today
+              #     align: top_right
+              - label:
+                  id: label_temp
+                  text: "--°C"
+                  text_font: font_sensor_value
+                  align: bottom_left
+        - obj:
+            x: 245
+            y: 160
+            width: 215
+            height: 135
+            widgets:
+              - label:
+                  text: "Humidity"
+                  text_font: font_15
+                  align: top_left
+              - image:
+                  src: icon_humi
+                  align: top_right
+              # - label:
+              #     text: "\U000F058E"
+              #     text_font: icon_today
+              #     align: top_right
+              - label:
+                  id: label_humi
+                  text: "--%"
+                  text_font: font_sensor_value
+                  align: bottom_left
+        - obj:
+            x: 20
+            y: 305
+            width: 215
+            height: 135
+            widgets:
+              - label:
+                  text: "Carbon Dioxide"
+                  text_font: font_15
+                  align: top_left
+              - image:
+                  src: icon_co2
+                  align: top_right
+              # - label:
+              #     text: "\U000F07E4"
+              #     text_font: icon_today
+              #     align: top_right
+              - label:
+                  id: label_eco2
+                  text: "--%"
+                  text_font: font_sensor_value
+                  align: bottom_left
+        - obj:
+            x: 245
+            y: 305
+            width: 215
+            height: 135
+            widgets:
+              - label:
+                  text: "Tvoc"
+                  text_font: font_15
+                  align: top_left
+              - image:
+                  src: icon_tvoc
+                  align: top_right
+              - label:
+                  id: label_tvoc
+                  text: "--%"
+                  text_font: font_sensor_value
+                  align: bottom_left
+  on_idle:
+    timeout: 10s
+    then:
+      - lvgl.pause:
+      - light.turn_off:
+          id: lcd_backlight
+          transition_length: 2s
+
+
+
+# Example minimal configuration entry
+display:
+  - platform: st7701s
+    id: tft_display
+    dimensions:
+      width: 480
+      height: 480
+    cs_pin: GPIO1
+    # reset_pin: GPIOXX
+    de_pin: GPIO45
+    hsync_pin: GPIO5
+    vsync_pin: GPIO4
+    pclk_pin: GPIO21
+    color_order: BGR
+    invert_colors: true
+    data_pins:
+      red:
+        - 39       #r1
+        - 40       #r2
+        - 41       #r3
+        - 42       #r4
+        - 2        #r5
+      green:
+        - 0        #g0
+        - 9        #g1
+        - 14       #g2
+        - 47       #g3
+        - 48       #g4
+        - 3        #g5
+      blue:
+        - 6        #b1
+        - 7        #b2
+        - 15       #b3
+        - 16       #b4
+        - 8        #b5
+    # show_test_card: true
+    auto_clear_enabled: false
+    update_interval: never
+
+
+
+touchscreen:
+  - platform: gt911
+    display: tft_display
+    id: touch_screen
+    update_interval: 50ms
+    reset_pin: GPIO38
+    transform:
+      swap_xy: false
+      mirror_x: false
+      mirror_y: false
+
+    on_release: 
+      - if: 
+          condition: 
+            lvgl.is_paused:
+          then: 
+            - light.turn_on: lcd_backlight
+            - lvgl.resume:
+            - lvgl.widget.redraw:
+
+# Example configuration entry
+sensor:
+  - platform: sgp30
+    eco2:
+      id: s_sgp30_eco2
+      name: "eCO2"
+      on_value: 
+        then:
+          - lvgl.label.update:
+              id: label_eco2
+              text: !lambda 'return str_sprintf("%.0fppm", x);'
+    tvoc:
+      id: s_sgp30_tvoc
+      name: "TVOC"
+      on_value: 
+        then:
+          - lvgl.label.update:
+              id: label_tvoc
+              text: !lambda 'return str_sprintf("%.0fppb", x);'
+
+  - platform: sht3xd
+    id: s_sht3xd
+    temperature:
+      name: "Temperature"
+      id: temperature
+      on_value:
+        then:
+          - lvgl.label.update:
+              id: label_temp
+              text: !lambda 'return str_sprintf("%.1f°C", x);'
+    humidity:
+      name: "Humidity"
+      id: humidity
+      on_value:
+        then:
+          - lvgl.label.update:
+              id: label_humi
+              text: !lambda 'return str_sprintf("%.1f%%", x);'
+    address: 0x44
+    update_interval: 2s
+
+time:
+  - platform: homeassistant
+    id: ha_time
+    on_time: 
+      - seconds: 0
+        minutes: "*"
+        then:
+          - lvgl.label.update:
+              id: label_time
+              text: !lambda |-
+                auto time = id(ha_time).now();
+                char buffer[6];
+                snprintf(buffer, sizeof(buffer), "%02d:%02d", time.hour, time.minute);
+                return std::string(buffer);
+
+# number:
+#   - platform: template
+#     name: LVGL Screen timeout
+#     optimistic: true
+#     id: display_timeout
+#     unit_of_measurement: "s"
+#     initial_value: 45
+#     restore_value: true
+#     min_value: 10
+#     max_value: 180
+#     step: 5
+#     mode: box
+

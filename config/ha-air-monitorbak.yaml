@@ -1,0 +1,169 @@
+esphome:
+  name: air-monitor
+  friendly_name: Makerfabs Air Monitor
+  min_version: 2025.11.2 # use 2025.11.2
+
+  on_boot:
+    - priority: -100
+      then:
+        - if:
+            condition:
+              lambda: return !id(s_sht3xd).is_failed() && !id(s_sgp4x).is_failed() && !id(tft_display).is_failed();
+            then:
+              - rtttl.play: 'Beep:d=8,o=5,b=600:c'
+
+esp32:
+  board: esp32-s3-devkitc-1
+  variant: esp32s3
+  flash_size: 16MB
+  cpu_frequency: 240MHz
+  framework:
+    type: esp-idf
+    sdkconfig_options:
+      CONFIG_ESP32S3_DEFAULT_CPU_FREQ_240: "y"
+      CONFIG_ESP32S3_DATA_CACHE_64KB: "y"
+      CONFIG_ESP32S3_DATA_CACHE_LINE_64B: "y"
+
+psram:
+  mode: octal
+  speed: 80MHz
+
+# Enable logging
+logger:
+  level: INFO
+
+# Enable Home Assistant API
+api:
+  encryption:
+    key: "qHBspV+EKzolBYTSvStuTl1OXMxRRjPNOThyQ1PidOE="
+
+ota:
+  - platform: esphome
+    password: "808dcebf08e6d249d866926211e79874="
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+
+  # Enable fallback hotspot (captive portal) in case wifi connection fails
+  ap:
+    ssid: "Air Monitor Fallback Hotspot"
+    password: "4xxhmzsUWdmp"
+
+captive_portal:
+
+web_server:
+  port: 80
+
+font:
+  - file: 
+      type: gfonts
+      family: Noto Sans SC
+      weight: 300
+    id: font_display
+    size: 15
+
+output:
+  - platform: ledc
+    pin:
+      number: GPIO7
+    frequency: 20000hz
+    id: lcd_pwm
+  - platform: ledc
+    pin: GPIO45
+    id: buzzer_out
+
+rtttl:
+  id: buzzer1
+  output: buzzer_out
+
+light:
+  - platform: monochromatic
+    name: "lcd backlight"
+    output: lcd_pwm
+    id: lcd_backlight
+    restore_mode: ALWAYS_ON
+  - platform: esp32_rmt_led_strip
+    rgb_order: GRB
+    pin: GPIO42
+    num_leds: 3
+    chipset: ws2812
+    name: RGB
+
+spi:
+  - id: spi_bus
+    clk_pin: GPIO10
+    mosi_pin: GPIO9
+
+
+i2c:
+  - id: i2c_bus
+    sda: GPIO38
+    scl: GPIO39
+    # scan: true
+    # frequency: 400kHz
+
+sensor:
+  - platform: sgp4x
+    id: s_sgp4x
+    voc:
+      id: voc_index
+      name: "VOC"
+    # nox:
+    #   name: "NOx Index"
+    update_interval: 5s
+
+  - platform: sht3xd
+    id: s_sht3xd
+    temperature:
+      name: "Temperature"
+      id: living_room_temperature
+    humidity:
+      name: "Humidity"
+      id: living_room_humidity
+    address: 0x44
+    update_interval: 2s
+
+display:
+  - platform: ili9xxx
+    id: tft_display
+    model: st7789v
+    spi_id: spi_bus
+    cs_pin: GPIO6
+    dc_pin: GPIO11
+    reset_pin: GPIO12
+    data_rate: 40MHz
+    dimensions:
+      width: 240
+      height: 135
+      offset_height: 52
+      offset_width: 40
+    transform:
+      swap_xy: true
+      mirror_x: false
+      mirror_y: true
+    color_order: BGR
+    invert_colors: true
+    auto_clear_enabled: true
+    # update_interval: never
+    # show_test_card: true
+    lambda: |-
+      it.print(0, 0, id(font_display), "Makerfabs Air Monitor");
+      if (id(living_room_temperature).has_state()) {
+        it.printf(0, 30, id(font_display), "Temp: %.1f C", id(living_room_temperature).state);
+      } else {
+        it.print(0, 30, id(font_display), "Temp: --");
+      }
+      if (id(living_room_humidity).has_state()) {
+        it.printf(0, 60, id(font_display), "Humi: %.1f %%", id(living_room_humidity).state);
+      } else {
+        it.print(0, 60, id(font_display), "Humi: --");
+      }
+      if (id(voc_index).has_state()) {
+        it.printf(0, 90, id(font_display), "VOC: %.0f", id(voc_index).state);
+      } else {
+        it.print(0, 90, id(font_display), "VOC: --");
+      }
+
+
+

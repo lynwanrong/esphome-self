@@ -1,7 +1,13 @@
 esphome:
-  name: fan
-  friendly_name: FAN
+  name: bl0942
+  friendly_name: bl0942
   min_version: 2025.11.2 # use 2025.11.2
+
+  # on_boot: 
+  #   then:
+  #     priority: 600
+  #     then:
+  #       - light.turn_on: sys_status_led
 
 esp32:
   board: esp32-s3-devkitc-1
@@ -21,7 +27,7 @@ psram:
 
 # Enable logging
 logger:
-  level: DEBUG
+  level: INFO
 
 # Enable Home Assistant API
 api:
@@ -35,6 +41,10 @@ ota:
 wifi:
   ssid: !secret wifi_ssid
   password: !secret wifi_password
+
+  on_connect:
+    then:
+      - light.turn_off: sys_status_led
 
   # Enable fallback hotspot (captive portal) in case wifi connection fails
   ap:
@@ -69,11 +79,24 @@ external_components:
       path: config/common_components
     components: [bl0942]
 
+output:
+  - platform: ledc
+    pin: GPIO7
+    id: sys_status_led_out
+    inverted: true
+
 switch:
   - platform: gpio
     pin: GPIO16
     name: switch
     id: relay_1
+    restore_mode: ALWAYS_ON
+
+light:
+  - platform: monochromatic
+    output: sys_status_led_out
+    internal: true
+    id: sys_status_led
     restore_mode: ALWAYS_ON
 
 

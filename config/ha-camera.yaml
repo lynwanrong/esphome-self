@@ -105,7 +105,7 @@ esp32_camera:
   href_pin: GPIO14
   pixel_clock_pin: GPIO9
   reset_pin: GPIO41
-  resolution: 320x240
+  # resolution: 320x240
   frame_buffer_count: 2
   max_framerate: 30 fps
   jpeg_quality: 10
